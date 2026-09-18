@@ -1,0 +1,2297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清明上河图 · 粒子长卷</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Noto Serif SC', serif;
+    color: #fff;
+    cursor: crosshair;
+  }
+
+  canvas { display: block; }
+
+  #ui-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .title-panel {
+    position: absolute;
+    top: 30px; left: 30px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(232, 213, 163, 0.12);
+    border-radius: 2px;
+    padding: 30px 40px;
+    pointer-events: auto;
+    transition: opacity 1.5s cubic-bezier(0.16, 1, 0.3, 1), transform 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+
+  .title-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .title-panel h1 {
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: 10px;
+    color: #e8d5a3;
+    text-shadow: 0 0 40px rgba(232, 213, 163, 0.25);
+    margin-bottom: 6px;
+  }
+
+  .title-panel .subtitle {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    color: rgba(160, 200, 200, 0.6);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .title-panel .divider {
+    width: 50px;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(232,213,163,0.5), transparent);
+    margin: 12px 0;
+  }
+
+  .title-panel .desc {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 12px;
+    color: rgba(200, 210, 210, 0.45);
+    line-height: 2;
+    letter-spacing: 1px;
+  }
+
+  .hint-bar {
+    position: absolute;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 11px;
+    color: rgba(160, 200, 200, 0.35);
+    letter-spacing: 4px;
+    opacity: 0;
+    transition: opacity 2s ease;
+    white-space: nowrap;
+  }
+
+  .hint-bar.visible { opacity: 1; }
+
+  .section-label {
+    position: absolute;
+    right: 36px;
+    top: 50%;
+    transform: translateY(-50%);
+    writing-mode: vertical-rl;
+    font-size: 13px;
+    letter-spacing: 8px;
+    color: rgba(232, 213, 163, 0.2);
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+
+  .section-label.visible { opacity: 1; }
+
+  #enter-btn {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 50;
+    background: transparent;
+    border: 1px solid rgba(232, 213, 163, 0.35);
+    color: #e8d5a3;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    letter-spacing: 8px;
+    padding: 18px 56px;
+    cursor: pointer;
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+  }
+
+  #enter-btn:hover {
+    background: rgba(232, 213, 163, 0.06);
+    border-color: rgba(232, 213, 163, 0.6);
+    box-shadow: 0 0 60px rgba(232, 213, 163, 0.08);
+    letter-spacing: 12px;
+  }
+
+  #enter-btn.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+
+  .loading-text {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 50;
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 12px;
+    color: rgba(160, 200, 200, 0.45);
+    letter-spacing: 4px;
+    transition: opacity 1s ease;
+  }
+
+  .loading-text.hidden { opacity: 0; pointer-events: none; }
+
+  .vignette {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 5;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.75) 100%);
+  }
+
+  .scroll-progress {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #4ecdc4, #e8d5a3, #4ecdc4, transparent);
+    z-index: 15;
+    transition: width 0.15s linear;
+    width: 0%;
+  }
+
+  /* ── 绢本颗粒 (宣纸纹理) ── */
+  .paper-grain {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 6;
+    opacity: 0.055;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+  }
+
+  /* ── 开卷封面 (包首) ── */
+  #scrollCover {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 40;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at 28% 18%, rgba(96, 62, 32, 0.30), transparent 55%),
+      radial-gradient(ellipse at 80% 85%, rgba(60, 38, 20, 0.35), transparent 60%),
+      linear-gradient(160deg, #191007 0%, #251809 45%, #150e08 100%);
+    box-shadow: 40px 0 90px rgba(0, 0, 0, 0.85);
+    transition: transform 2.4s cubic-bezier(0.77, 0, 0.18, 1);
+    will-change: transform;
+  }
+  #scrollCover::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(232, 213, 163, 0.03) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.06) 0 1px, transparent 1px 4px);
+  }
+  /* 卷轴天杆地杆 (揭示边) */
+  #scrollCover::after {
+    content: '';
+    position: absolute;
+    top: -2%; bottom: -2%;
+    right: -15px;
+    width: 17px;
+    border-radius: 9px;
+    background: linear-gradient(90deg, #241708, #7a5628 40%, #9a7038 55%, #241708);
+    box-shadow: 0 0 34px rgba(0, 0, 0, 0.75);
+  }
+  #scrollCover.unrolling { transform: translateX(-104%); }
+
+  #coverStrip {
+    position: absolute;
+    top: 50%; right: 15%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    padding: 42px 26px;
+    background: linear-gradient(175deg, #d9c9a2, #c6b189 65%, #b19c72);
+    border: 1px solid rgba(58, 40, 20, 0.4);
+    box-shadow: 0 12px 44px rgba(0, 0, 0, 0.55), inset 0 0 34px rgba(92, 62, 30, 0.28);
+    transition: opacity 0.9s ease, transform 0.9s ease;
+  }
+  #coverStrip .strip-title {
+    writing-mode: vertical-rl;
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 14px;
+    color: #2b1f12;
+    text-shadow: 0 1px 0 rgba(255, 250, 230, 0.35);
+  }
+  #coverStrip .strip-sub {
+    writing-mode: vertical-rl;
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 11px;
+    letter-spacing: 7px;
+    color: rgba(58, 40, 22, 0.7);
+  }
+  #coverStrip .strip-seal {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    padding: 7px;
+    background: linear-gradient(140deg, #a83224, #8c2318);
+    border-radius: 6px;
+    color: #ecdfc2;
+    font-weight: 900;
+    font-size: 19px;
+    line-height: 1;
+    box-shadow: inset 0 0 0 2px rgba(236, 223, 194, 0.5), 0 4px 14px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: scale(0.001) rotate(-16deg);
+  }
+  #coverStrip .strip-seal span:nth-child(1) { grid-area: 1 / 2; }
+  #coverStrip .strip-seal span:nth-child(2) { grid-area: 2 / 2; }
+  #coverStrip .strip-seal span:nth-child(3) { grid-area: 1 / 1; }
+  #coverStrip .strip-seal span:nth-child(4) { grid-area: 2 / 1; }
+  #coverStrip.stamping .strip-seal {
+    animation: sealStamp 0.6s cubic-bezier(0.22, 1.4, 0.36, 1) forwards;
+  }
+  @keyframes sealStamp {
+    0%   { opacity: 0; transform: rotate(-16deg) scale(2.4); filter: blur(2px); }
+    55%  { opacity: 1; transform: rotate(-2deg) scale(0.9); filter: blur(0); }
+    75%  { transform: rotate(-4deg) scale(1.06); }
+    100% { opacity: 1; transform: rotate(-3deg) scale(1); }
+  }
+  #coverStrip.lift {
+    opacity: 0;
+    transform: translateY(calc(-50% - 48px));
+  }
+  #scrollCover.unrolling #coverStrip { opacity: 0; }
+
+  /* 题板小印 */
+  .mini-seal {
+    display: inline-block;
+    vertical-align: 6px;
+    margin-left: 10px;
+    padding: 3px 5px;
+    background: linear-gradient(140deg, #a83224, #8c2318);
+    border-radius: 3px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    line-height: 1.2;
+    color: #ecdfc2;
+    box-shadow: inset 0 0 0 1px rgba(236, 223, 194, 0.45);
+  }
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+
+<div id="ui-overlay">
+  <div class="title-panel" id="titlePanel">
+    <h1>清明上河图<span class="mini-seal">上河</span></h1>
+    <div class="subtitle">Along the River During the Qingming Festival</div>
+    <div class="divider"></div>
+    <div class="desc">
+      北宋 · 张择端<br>
+      粒子重构 · 数字长卷
+    </div>
+  </div>
+
+  <div class="hint-bar" id="hintBar">
+    ✦ 拖拽旋转视角 · 滚轮缩放漫游 · 空格键自动巡游
+  </div>
+
+  <div class="section-label" id="sectionLabel">郊野春色</div>
+</div>
+
+<div class="loading-text" id="loadingText">初始化粒子引擎…</div>
+<button id="enter-btn" style="display:none;">进入长卷</button>
+<div class="scroll-progress" id="scrollProgress"></div>
+
+<!-- 开卷封面: 包首 + 题签 + 钤印 -->
+<div id="scrollCover">
+  <div id="coverStrip">
+    <div class="strip-title">清明上河图</div>
+    <div class="strip-sub">北宋 · 张择端 · 绢本设色</div>
+    <div class="strip-seal"><span>清</span><span>明</span><span>上</span><span>河</span></div>
+  </div>
+</div>
+<div class="paper-grain"></div>
+
+<!-- 手势控制摄像头 -->
+<video id="gestureVideo" playsinline style="
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+  transform: scaleX(-1);
+  border: 1px solid rgba(160, 200, 200, 0.4);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 1s ease;
+  z-index: 10;
+  pointer-events: none;
+"></video>
+<canvas id="gestureCanvas" width="320" height="240" style="
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 200px;
+  height: 150px;
+  transform: scaleX(-1);
+  border-radius: 8px;
+  z-index: 11;
+  pointer-events: none;
+"></canvas>
+<div id="gestureHint" style="
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 11px;
+  color: rgba(160, 200, 200, 0.35);
+  letter-spacing: 3px;
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+">✦ 摄像头手势控制已就绪 · 张开手掌旋转视角 · 捏合控制高度 · 前后移动推近</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+<script>
+(function() {
+  'use strict';
+
+  const CONFIG = {
+    terrainWidth: 260,
+    terrainDepth: 800,
+    particleCount: 380000,
+    starCount: 5000,
+    riverWidth: 28,
+    mountainHeight: 45,
+    autoScrollSpeed: 0.12,
+  };
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0f0a06, 0.0011);
+
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 3000);
+  camera.position.set(0, 50, 100);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x0f0a06, 1);
+  document.body.appendChild(renderer.domElement);
+
+  // ─── Bloom 辉光后期 (库加载失败时自动降级为直绘) ───
+  let composer = null;
+  if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass) {
+    composer = new THREE.EffectComposer(renderer);
+    composer.addPass(new THREE.RenderPass(scene, camera));
+    composer.addPass(new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.9, 0.18));
+  }
+
+  // ─── Noise ───
+  function hash(x, y) {
+    let n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+
+  function smoothNoise(x, y) {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx);
+    const uy = fy * fy * (3 - 2 * fy);
+    const a = hash(ix, iy), b = hash(ix + 1, iy);
+    const c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+  }
+
+  function fbm(x, y, octaves) {
+    let value = 0, amplitude = 1, frequency = 1, max = 0;
+    for (let i = 0; i < octaves; i++) {
+      value += smoothNoise(x * frequency, y * frequency) * amplitude;
+      max += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2.1;
+    }
+    return value / max;
+  }
+
+  function ridgeNoise(x, y, octaves) {
+    let value = 0, amplitude = 1, frequency = 1, max = 0;
+    for (let i = 0; i < octaves; i++) {
+      let n = smoothNoise(x * frequency, y * frequency);
+      n = 1 - Math.abs(n * 2 - 1);
+      n = n * n;
+      value += n * amplitude;
+      max += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2.1;
+    }
+    return value / max;
+  }
+
+  // ─── Terrain Height ──
+  function getTerrainHeight(x, z) {
+    const nx = x * 0.006;
+    const nz = z * 0.004;
+
+    // River meanders
+    const riverCenter = Math.sin(z * 0.006) * 18 + Math.sin(z * 0.015) * 6;
+    const distFromRiver = Math.abs(x - riverCenter);
+
+    // Base terrain with fbm
+    let height = fbm(nx, nz, 6) * CONFIG.mountainHeight;
+
+    // Ridge mountains on the sides
+    const ridge = ridgeNoise(nx * 1.5, nz * 1.2, 5);
+    const sideFactor = Math.min(1, distFromRiver / 40);
+    height += ridge * 20 * sideFactor;
+
+    // River valley carving
+    const riverFactor = Math.max(0, 1 - distFromRiver / CONFIG.riverWidth);
+    height -= riverFactor * 12;
+
+    // Flatten near river banks for buildings
+    if (distFromRiver < CONFIG.riverWidth * 2 && distFromRiver > CONFIG.riverWidth * 0.7) {
+      height *= 0.25;
+    }
+
+    // Gentle slope near river
+    if (distFromRiver < CONFIG.riverWidth * 3) {
+      height *= 0.4 + 0.6 * (distFromRiver / (CONFIG.riverWidth * 3));
+    }
+
+    return height;
+  }
+
+  function getRiverCenter(z) {
+    return Math.sin(z * 0.006) * 18 + Math.sin(z * 0.015) * 6;
+  }
+
+  // ─── Terrain Particles ───
+  function createTerrainParticles() {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(CONFIG.particleCount * 3);
+    const colors = new Float32Array(CONFIG.particleCount * 3);
+    const sizes = new Float32Array(CONFIG.particleCount);
+    const alphas = new Float32Array(CONFIG.particleCount);
+
+    // 水墨淡彩调色盘 —— 绢本设色
+    const c1 = new THREE.Color(0x8f887a);    // 远山淡墨
+    const c2 = new THREE.Color(0x635c4c);    // 中景赭墨
+    const c3 = new THREE.Color(0x403a2f);    // 近景浓墨
+    const c4 = new THREE.Color(0x221e18);    // 山脚焦墨
+    const pine = new THREE.Color(0x37432f);  // 山间苔点
+    const gold1 = new THREE.Color(0xd9b878); // 汴水绢金
+    const gold2 = new THREE.Color(0xb08d58);
+    const gold3 = new THREE.Color(0x7d6340);
+
+    for (let i = 0; i < CONFIG.particleCount; i++) {
+      const x = (Math.random() - 0.5) * CONFIG.terrainWidth * 1.3;
+      const z = (Math.random() - 0.5) * CONFIG.terrainDepth;
+      const y = getTerrainHeight(x, z);
+
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+
+      const riverCenter = getRiverCenter(z);
+      const distFromRiver = Math.abs(x - riverCenter);
+      const isRiver = distFromRiver < CONFIG.riverWidth * 0.55;
+      const isBank = distFromRiver < CONFIG.riverWidth * 1.0 && !isRiver;
+      const isNearBank = distFromRiver < CONFIG.riverWidth * 2.5 && !isRiver && !isBank;
+
+      let color, size;
+
+      if (isRiver) {
+        // River: golden flowing particles
+        const t = Math.random();
+        if (t < 0.5) color = gold1;
+        else if (t < 0.8) color = gold2;
+        else color = gold3;
+        size = Math.random() * 2.0 + 0.8;
+      } else if (isBank) {
+        color = Math.random() > 0.5 ? c2 : c3;
+        size = Math.random() * 1.5 + 0.4;
+      } else if (isNearBank) {
+        color = Math.random() > 0.6 ? c2 : c3;
+        size = Math.random() * 1.8 + 0.3;
+      } else {
+        // Mountains: cyan/teal gradient by height
+        const heightRatio = Math.max(0, Math.min(1, (y + 5) / (CONFIG.mountainHeight + 10)));
+        if (heightRatio > 0.75) {
+          color = Math.random() > 0.4 ? c1 : c2;
+          size = Math.random() * 2.2 + 0.5;
+        } else if (heightRatio > 0.4) {
+          color = Math.random() > 0.78 ? pine : (Math.random() > 0.5 ? c2 : c3);
+          size = Math.random() * 1.8 + 0.3;
+        } else {
+          color = Math.random() > 0.6 ? c3 : c4;
+          size = Math.random() * 1.5 + 0.2;
+        }
+      }
+
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+      sizes[i] = size;
+      alphas[i] = 0.35 + Math.random() * 0.65;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+          vec3 pos = position;
+
+          // River particles flow
+          float riverDist = abs(pos.x - (sin(pos.z * 0.006) * 18.0 + sin(pos.z * 0.015) * 6.0));
+          if (riverDist < 15.0) {
+            // 汴水流动：波纹沿河道推进，明暗成缕如画中水纹
+            float ripple = sin(pos.z * 0.35 - uTime * 2.2 + pos.x * 0.4);
+            pos.z += ripple * 0.4;
+            pos.y += sin(uTime * 2.0 + pos.z * 0.5 + pos.x * 0.3) * 0.12;
+            vAlpha *= 0.55 + 0.45 * sin(pos.z * 0.5 - uTime * 1.8 + pos.x * 0.25);
+          } else {
+            // Mountain subtle breathing
+            pos.y += sin(pos.x * 0.05 + uTime * 0.3) * 0.2;
+            pos.y += cos(pos.z * 0.04 + uTime * 0.2) * 0.15;
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (80.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.5, 8.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 9.0);
+          float core = exp(-dist * 12.0) * 0.35;
+          gl_FragColor = vec4(vColor * (1.0 + core), glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── Stars ───
+  function createStars() {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(CONFIG.starCount * 3);
+    const sizes = new Float32Array(CONFIG.starCount);
+    const phases = new Float32Array(CONFIG.starCount);
+
+    for (let i = 0; i < CONFIG.starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.5;
+      const r = 400 + Math.random() * 200;
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.cos(phi) + 30;
+      positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta) - 200;
+      sizes[i] = Math.random() * 2.5 + 0.3;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float phase;
+        varying float vTwinkle;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vTwinkle = 0.5 + 0.5 * sin(uTime * (0.5 + phase * 0.3) + phase * 6.28);
+          vec3 pos = position;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (80.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.3, 4.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vTwinkle;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * 7.0);
+          gl_FragColor = vec4(0.91, 0.84, 0.68, glow * vTwinkle * 0.45);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── Architecture ──
+  function createArchitectureParticles() {
+    const archPositions = [];
+    const archColors = [];
+    const archSizes = [];
+
+    // 建筑设色：粉墙黛瓦 · 木构赭褐 · 纸窗透暖
+    const wood = new THREE.Color(0xa87c50);
+    const woodDark = new THREE.Color(0x5c4430);
+    const roof = new THREE.Color(0x2e3a33);
+    const roofDark = new THREE.Color(0x18211c);
+    const lantern = new THREE.Color(0xff9d45);
+    const lanternWarm = new THREE.Color(0xffc067);
+    const light = new THREE.Color(0xf2e3bd);
+    const white = new THREE.Color(0xcfc3a5);
+
+    function addBuilding(bx, bz, bw, bd, bh, roofH) {
+      const h = getTerrainHeight(bx, bz);
+
+      // Walls - front and back
+      for (let w = 0; w < 200; w++) {
+        const wx = bx + (Math.random() - 0.5) * bw;
+        const wz = bz + (Math.random() > 0.5 ? 1 : -1) * bd * 0.5;
+        const wy = Math.random() * bh;
+        archPositions.push(wx, wy + h, wz);
+        const c = Math.random() > 0.85 ? light : (Math.random() > 0.5 ? wood : white);
+        archColors.push(c.r, c.g, c.b);
+        archSizes.push(Math.random() * 1.0 + 0.4);
+      }
+
+      // Walls - sides
+      for (let w = 0; w < 140; w++) {
+        const wx = bx + (Math.random() > 0.5 ? 1 : -1) * bw * 0.5;
+        const wz = bz + (Math.random() - 0.5) * bd;
+        const wy = Math.random() * bh;
+        archPositions.push(wx, wy + h, wz);
+        const c = Math.random() > 0.8 ? light : wood;
+        archColors.push(c.r, c.g, c.b);
+        archSizes.push(Math.random() * 0.9 + 0.3);
+      }
+
+      // Traditional curved roof (飞檐)
+      for (let r = 0; r < 280; r++) {
+        const rx = bx + (Math.random() - 0.5) * (bw + 3);
+        const rz = bz + (Math.random() - 0.5) * (bd + 3);
+        const roofCurve = Math.pow(Math.abs(rx - bx) / (bw * 0.5 + 1.5), 2) * roofH * 0.3;
+        const ry = bh + roofH - roofCurve + Math.random() * 1.5;
+        archPositions.push(rx, ry + h, rz);
+        const c = Math.random() > 0.7 ? roofDark : roof;
+        archColors.push(c.r, c.g, c.b);
+        archSizes.push(Math.random() * 0.9 + 0.3);
+      }
+
+      // Roof ridge
+      for (let r = 0; r < 50; r++) {
+        const rx = bx + (Math.random() - 0.5) * 2;
+        const ry = bh + roofH + Math.random() * 0.5;
+        const rz = bz + (Math.random() - 0.5) * bd * 0.8;
+        archPositions.push(rx, ry + h, rz);
+        archColors.push(roofDark.r, roofDark.g, roofDark.b);
+        archSizes.push(Math.random() * 1.0 + 0.4);
+      }
+
+      // Lanterns at eaves
+      for (let l = 0; l < 4; l++) {
+        const lx = bx + (l < 2 ? -1 : 1) * (bw * 0.4 + Math.random());
+        const lz = bz + (l % 2 === 0 ? -1 : 1) * bd * 0.4;
+        for (let lp = 0; lp < 20; lp++) {
+          archPositions.push(
+            lx + (Math.random() - 0.5) * 0.8,
+            bh - 1 + Math.random() * 1.5 + h,
+            lz + (Math.random() - 0.5) * 0.8
+          );
+          const c = Math.random() > 0.3 ? lantern : lanternWarm;
+          archColors.push(c.r, c.g, c.b);
+          archSizes.push(Math.random() * 2 + 1);
+        }
+      }
+    }
+
+    // ── Buildings along both river banks ──
+    const buildingZones = [
+      // Left bank buildings
+      { side: -1, startZ: -350, count: 18, spacing: 35 },
+      // Right bank buildings
+      { side: 1, startZ: -350, count: 18, spacing: 35 },
+    ];
+
+    buildingZones.forEach(zone => {
+      for (let b = 0; b < zone.count; b++) {
+        const bz = zone.startZ + b * zone.spacing + (Math.random() - 0.5) * 10;
+        const riverC = getRiverCenter(bz);
+        const bx = riverC + zone.side * (18 + Math.random() * 20);
+        const bw = 5 + Math.random() * 6;
+        const bd = 4 + Math.random() * 4;
+        const bh = 5 + Math.random() * 10;
+        const roofH = 2 + Math.random() * 3;
+        addBuilding(bx, bz, bw, bd, bh, roofH);
+      }
+    });
+
+    // ── 沿街伞棚 · 市井小摊 (Street stalls) ──
+    const awningC = new THREE.Color(0x9a8a68);
+    for (let s = 0; s < 26; s++) {
+      const sz = -330 + Math.random() * 690;
+      const rc = getRiverCenter(sz);
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const sx = rc + side * (15 + Math.random() * 13);
+      const h = getTerrainHeight(sx, sz);
+      // 摊案
+      for (let i = 0; i < 8; i++) {
+        archPositions.push(sx + (Math.random() - 0.5) * 2.2, h + 0.8 + Math.random() * 0.3, sz + (Math.random() - 0.5) * 1.2);
+        archColors.push(woodDark.r, woodDark.g, woodDark.b);
+        archSizes.push(0.4);
+      }
+      // 伞柱
+      archPositions.push(sx, h + 1.6, sz);
+      archColors.push(woodDark.r, woodDark.g, woodDark.b);
+      archSizes.push(0.45);
+      // 伞面
+      for (let p = 0; p < 52; p++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * 2.0;
+        archPositions.push(
+          sx + Math.cos(a) * r,
+          h + 2.7 - r * 0.6 + Math.random() * 0.12,
+          sz + Math.sin(a) * r
+        );
+        const c = Math.random() > 0.55 ? white : (Math.random() > 0.5 ? awningC : roof);
+        archColors.push(c.r, c.g, c.b);
+        archSizes.push(0.4 + Math.random() * 0.3);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(archPositions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(archColors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(archSizes, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vColor = color;
+          vec3 pos = position;
+
+          // Lantern glow pulse
+          float distFromRiver = abs(pos.x - (sin(pos.z * 0.006) * 18.0 + sin(pos.z * 0.015) * 6.0));
+          if (size > 2.0 && distFromRiver < 20.0) {
+            // Lantern particles pulse
+            float pulse = 0.85 + 0.15 * sin(uTime * 4.0 + pos.x * 2.0 + pos.z);
+            pos.y += sin(uTime * 1.5 + pos.x) * 0.1;
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (80.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.5, 7.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 7.0);
+          float core = exp(-dist * 10.0) * 0.4;
+          // 墨点颗粒 —— 纸纹飞白
+          float grain = fract(sin(dot(gl_PointCoord, vec2(12.9898, 78.233))) * 43758.5453);
+          glow *= 0.82 + 0.18 * grain;
+          gl_FragColor = vec4(vColor + core, glow * 0.85);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── Floating Lanterns (sky) ───
+  function createLanterns() {
+    const count = 150;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const phases = new Float32Array(count);
+
+    const c1 = new THREE.Color(0xe8c27a); // 暖金流萤
+    const c2 = new THREE.Color(0xd8c8a4); // 绢色飞絮
+    const c3 = new THREE.Color(0xc9a86a);
+
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * CONFIG.terrainWidth * 0.9;
+      positions[i * 3 + 1] = Math.random() * 26 + 6;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * CONFIG.terrainDepth * 0.85;
+
+      const c = Math.random() > 0.6 ? (Math.random() > 0.5 ? c1 : c2) : c3;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+      sizes[i] = Math.random() * 2.2 + 0.9;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float phase;
+        varying vec3 vColor;
+        varying float vPhase;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vColor = color;
+          vPhase = phase;
+          vec3 pos = position;
+          pos.y += sin(uTime * 0.3 + phase) * 2.2;
+          pos.x += cos(uTime * 0.18 + phase * 0.7) * 2.6;
+          pos.z += sin(uTime * 0.11 + phase * 0.3) * 1.6;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (120.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 1.0, 9.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vPhase;
+        uniform float uTime;
+
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * 2.5);
+          float core = exp(-dist * 8.0) * 0.6;
+          float flicker = 0.8 + 0.2 * sin(uTime * 3.5 + vPhase * 10.0);
+          gl_FragColor = vec4(vColor + core, glow * flicker * 0.85);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 虹桥 · 编木拱 (The Rainbow Bridge) ───
+  function createRainbowBridge() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+
+    const ribC = new THREE.Color(0x6a4a30);      // 拱骨深赭
+    const ribDarkC = new THREE.Color(0x4a3524);
+    const deckC = new THREE.Color(0xa87c50);     // 桥面浅木
+    const railC = new THREE.Color(0x54402c);     // 栏杆
+    const railTopC = new THREE.Color(0xd8c8a4);  // 望柱头
+    const birdC = new THREE.Color(0xe8e0cc);     // 表柱白鹤
+
+    const bridgeZ = -80;
+    const riverC = getRiverCenter(bridgeZ);
+    const span = 38;
+    const rise = 9;
+    const halfW = 2.6;
+    const yEnd = getTerrainHeight(riverC - span / 2, bridgeZ);
+    const archY = (t) => yEnd + Math.sin(t * Math.PI) * rise;
+
+    // 编木拱骨: 两套系统相错, 并列5根, 每根双线
+    for (let sys = 0; sys < 2; sys++) {
+      for (let rib = 0; rib < 5; rib++) {
+        const rz = bridgeZ + (rib - 2) * (halfW * 2 / 4);
+        for (let line = 0; line < 2; line++) {
+          const lz = rz + (line - 0.5) * 0.5;
+          const seg = 26;
+          for (let i = 0; i <= seg; i++) {
+            const t = (i / seg) * 0.94 + 0.03 + sys * 0.017;
+            positions.push(riverC - span / 2 + t * span, archY(t), lz);
+            const c = (i % 4 === 0) ? ribDarkC : ribC;
+            colors.push(c.r, c.g, c.b);
+            sizes.push(Math.random() * 0.5 + 0.45);
+          }
+        }
+      }
+    }
+
+    // 横系木
+    for (let b = 0; b < 13; b++) {
+      const t = b / 12;
+      const px = riverC - span / 2 + t * span;
+      const py = archY(t) + 0.35;
+      for (let i = 0; i < 9; i++) {
+        positions.push(px, py, bridgeZ - halfW + (i / 8) * halfW * 2);
+        colors.push(ribDarkC.r, ribDarkC.g, ribDarkC.b);
+        sizes.push(Math.random() * 0.4 + 0.35);
+      }
+    }
+
+    // 桥面板
+    for (let i = 0; i < 900; i++) {
+      const t = Math.random();
+      positions.push(
+        riverC - span / 2 + t * span,
+        archY(t) + 0.45 + Math.random() * 0.15,
+        bridgeZ + (Math.random() - 0.5) * halfW * 1.85
+      );
+      const c = Math.random() > 0.6 ? deckC : ribC;
+      colors.push(c.r, c.g, c.b);
+      sizes.push(Math.random() * 0.55 + 0.4);
+    }
+
+    // 栏板扶手 + 望柱
+    for (let side = -1; side <= 1; side += 2) {
+      const rz = bridgeZ + side * halfW;
+      for (let i = 0; i <= 90; i++) {
+        const t = (i / 90) * 0.96 + 0.02;
+        positions.push(riverC - span / 2 + t * span, archY(t) + 1.35, rz);
+        colors.push(railC.r, railC.g, railC.b);
+        sizes.push(0.4);
+      }
+      for (let p = 0; p <= 20; p++) {
+        const t = p / 20;
+        const px = riverC - span / 2 + (t * 0.96 + 0.02) * span;
+        const py = archY(t) + 0.5;
+        for (let s = 0; s < 4; s++) {
+          positions.push(px, py + s * 0.28, rz);
+          colors.push(railC.r, railC.g, railC.b);
+          sizes.push(0.4);
+        }
+        positions.push(px, py + 1.18, rz);
+        colors.push(railTopC.r, railTopC.g, railTopC.b);
+        sizes.push(0.55);
+      }
+    }
+
+    // 桥头华表 (表柱 + 顶上仙鹤)
+    for (let side = -1; side <= 1; side += 2) {
+      const px = riverC + side * (span / 2 + 2.5);
+      const pz = bridgeZ + side * 4.5;
+      const h = getTerrainHeight(px, pz);
+      for (let s = 0; s <= 12; s++) {
+        positions.push(px, h + s * 0.5, pz);
+        colors.push(railC.r, railC.g, railC.b);
+        sizes.push(0.5);
+      }
+      positions.push(px, h + 6.6, pz);
+      colors.push(railTopC.r, railTopC.g, railTopC.b);
+      sizes.push(0.7);
+      positions.push(px, h + 7.2, pz);
+      colors.push(birdC.r, birdC.g, birdC.b);
+      sizes.push(0.9);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.5, 6.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 8.0);
+          gl_FragColor = vec4(vColor, glow * 0.9);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 城门楼 · 城垣 (The City Gate & Wall) ───
+  function createCityGate() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+
+    const brickC = new THREE.Color(0x4a3a2e);
+    const brickLightC = new THREE.Color(0x6a5642);
+    const wallC = new THREE.Color(0xcfc3a5);
+    const woodC = new THREE.Color(0x6a4a30);
+    const roofC = new THREE.Color(0x232d28);
+    const roofDarkC = new THREE.Color(0x121a16);
+    const lampC = new THREE.Color(0xffc067);
+
+    function push(x, y, z, c, s) {
+      positions.push(x, y, z);
+      colors.push(c.r, c.g, c.b);
+      sizes.push(s);
+    }
+
+    const gz = -280;
+    const riverC = getRiverCenter(gz);
+    const wallH = 11;
+    const wallLen = 64;
+    const wallThick = 13;
+    const archW = 4.5;
+    const archH = 8.5;
+
+    // 城台 (门洞留白)
+    for (let i = 0; i < 2400; i++) {
+      const px = riverC + (Math.random() - 0.5) * wallLen;
+      const pz = gz + (Math.random() - 0.5) * wallThick;
+      const py = Math.random() * wallH;
+      const dx = Math.abs(px - riverC);
+      if (dx < archW + 0.3) {
+        const top = archH * Math.sqrt(Math.max(0, 1 - Math.pow(dx / (archW + 0.3), 2)));
+        if (py < top + 0.4) continue;
+      }
+      push(px, py, pz, Math.random() > 0.85 ? brickLightC : brickC, 0.4 + Math.random() * 0.5);
+    }
+
+    // 门洞拱券勾边
+    for (let i = 0; i <= 44; i++) {
+      const a = (i / 44) * Math.PI;
+      const px = riverC - Math.cos(a) * archW;
+      const py = Math.sin(a) * archH;
+      push(px, py, gz + wallThick / 2, brickLightC, 0.55);
+      push(px, py, gz - wallThick / 2, brickLightC, 0.55);
+    }
+
+    // 城台顶面与垛口
+    for (let i = 0; i < 320; i++) {
+      push(riverC + (Math.random() - 0.5) * wallLen, wallH + 0.1 + Math.random() * 0.25, gz + (Math.random() - 0.5) * wallThick, brickC, 0.4 + Math.random() * 0.3);
+    }
+    for (let side = -1; side <= 1; side += 2) {
+      for (let p = 0; p < 24; p++) {
+        const px = riverC - wallLen / 2 + 1.2 + p * (wallLen - 2.4) / 23;
+        const pz = gz + side * wallThick / 2;
+        push(px, wallH + 0.3, pz, brickC, 0.45);
+        push(px, wallH + 0.75, pz, brickLightC, 0.5);
+      }
+    }
+
+    // 城楼: 两层, 柱廊粉墙 + 曲檐起翘
+    const towerW = 15, towerD = 9, floorH = 4.2;
+    for (let f = 0; f < 2; f++) {
+      const fy = wallH + f * (floorH + 1.4);
+      for (let i = 0; i < 150; i++) {
+        const px = riverC + (Math.random() - 0.5) * towerW;
+        const pz = gz + (Math.random() - 0.5) * towerD;
+        if (Math.abs(px - riverC) < towerW * 0.34 && Math.abs(pz - gz) < towerD * 0.34) continue;
+        push(px, fy + Math.random() * floorH, pz, Math.random() > 0.55 ? wallC : woodC, 0.4 + Math.random() * 0.3);
+      }
+      const isTop = f === 1;
+      const eaveY = fy + floorH + (isTop ? 1.7 : 1.0);
+      for (let i = 0; i < 430; i++) {
+        const px = riverC + (Math.random() - 0.5) * (towerW + 3.6);
+        const pz = gz + (Math.random() - 0.5) * (towerD + 2.6);
+        const nx = Math.abs(px - riverC) / (towerW * 0.5 + 1.8);
+        const nz = Math.abs(pz - gz) / (towerD * 0.5 + 1.3);
+        const nn = Math.max(nx, nz);
+        const cornerLift = Math.pow(nn, 6) * 1.7;   // 檐角起翘
+        push(px, eaveY - nn * 1.5 + cornerLift + Math.random() * 0.2, pz, Math.random() > 0.6 ? roofDarkC : roofC, 0.45);
+      }
+      if (isTop) {
+        for (let i = 0; i <= 30; i++) {
+          const pz = gz - towerD * 0.36 + (i / 30) * towerD * 0.72;
+          push(riverC, eaveY + 0.85 + Math.random() * 0.15, pz, roofDarkC, 0.55);
+        }
+        push(riverC - towerW * 0.5, eaveY + 1.85, gz, roofDarkC, 0.65);
+        push(riverC + towerW * 0.5, eaveY + 1.85, gz, roofDarkC, 0.65);
+      }
+    }
+
+    // 城垣向两侧延展, 渐远渐低
+    for (let side = -1; side <= 1; side += 2) {
+      for (let i = 0; i < 1300; i++) {
+        const off = Math.pow(Math.random(), 1.4) * 85;
+        const px = riverC + side * (wallLen / 2 + off);
+        const pz = gz + (Math.random() - 0.5) * wallThick * 0.8;
+        const wh = Math.max(3, wallH * (1 - off / 95));
+        push(px, getTerrainHeight(px, pz) + Math.random() * wh, pz, Math.random() > 0.85 ? brickLightC : brickC, 0.35 + Math.random() * 0.45);
+      }
+    }
+
+    // 门洞暖光
+    for (let i = 0; i < 12; i++) {
+      push(riverC + (Math.random() - 0.5) * 3, archH * 0.7, gz + (Math.random() - 0.5) * wallThick * 0.5, lampC, 1.3);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.4, 6.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 8.0);
+          gl_FragColor = vec4(vColor, glow * 0.9);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 漕船 · 舟楫 (Boats drifting on the Bian) ───
+  function createBoats() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+    const phases = [];
+
+    const hullC = new THREE.Color(0x54402c);
+    const hullLightC = new THREE.Color(0x6f5136);
+    const canopyC = new THREE.Color(0x5a6a58);   // 竹篷青
+    const mastC = new THREE.Color(0x3a2f22);
+    const flagCs = [new THREE.Color(0x8a6a48), new THREE.Color(0x5a6a68), new THREE.Color(0xcfc3a5)];
+    const lampC = new THREE.Color(0xffc067);
+
+    function push(x, y, z, c, s, ph) {
+      positions.push(x, y, z);
+      colors.push(c.r, c.g, c.b);
+      sizes.push(s);
+      phases.push(ph);
+    }
+
+    for (let boat = 0; boat < 14; boat++) {
+      const bz = -340 + boat * 52 + (Math.random() - 0.5) * 18;
+      const riverC = getRiverCenter(bz);
+      const bx = riverC + (Math.random() - 0.5) * 10;
+      const wy = getTerrainHeight(bx, bz);
+      const phase = Math.random() * Math.PI * 2;
+      const len = 8 + Math.random() * 3;
+      const wid = 1.2 + Math.random() * 0.5;
+
+      // 船体: 逐站位 U 形剖面, 首尾起翘
+      const stations = 22;
+      for (let s = 0; s <= stations; s++) {
+        const t = s / stations;
+        const sz = bz - len / 2 + t * len;
+        const w = wid * Math.pow(Math.max(0.06, Math.sin((t * 0.86 + 0.07) * Math.PI)), 0.55);
+        const sheer = 2.4 * Math.pow(Math.abs(t - 0.5) * 2, 2.4);
+        push(bx, wy + 0.15 + sheer * 0.2, sz, hullC, 0.42, phase);
+        for (let sd = -1; sd <= 1; sd += 2) {
+          for (let e = 0; e < 3; e++) {
+            push(bx + sd * w, wy + 0.4 + e * (0.85 + sheer * 0.5) / 2 + sheer, sz, e === 2 ? hullLightC : hullC, 0.38 + Math.random() * 0.2, phase);
+          }
+        }
+        if (s % 2 === 0) push(bx, wy + 1.35 + sheer, sz, hullLightC, 0.4, phase);
+      }
+
+      // 竹篷舱 (半圆拱)
+      if (Math.random() > 0.3) {
+        const coverLen = len * 0.45;
+        for (let s = 0; s <= 14; s++) {
+          const t = s / 14;
+          const sz = bz - coverLen / 2 + t * coverLen;
+          for (let a = 0; a <= 6; a++) {
+            const ang = (a / 6) * Math.PI;
+            push(bx + Math.cos(ang) * wid * 0.85, wy + 1.5 + Math.sin(ang) * wid * 0.72, sz, canopyC, 0.38, phase);
+          }
+        }
+      }
+
+      // 桅杆与旗
+      if (Math.random() > 0.45) {
+        const mz = bz + len * 0.12;
+        for (let s = 0; s <= 9; s++) push(bx, wy + 1.5 + s * 0.72, mz, mastC, 0.36, phase);
+        const fc = flagCs[Math.floor(Math.random() * flagCs.length)];
+        for (let f = 0; f < 6; f++) push(bx + 0.15 + f * 0.32, wy + 7.9 - f * 0.06, mz, fc, 0.38, phase);
+      }
+
+      // 尾橹
+      for (let s = 0; s < 4; s++) {
+        push(bx + s * 0.65, wy + 1.3 - s * 0.16, bz + len / 2 + 0.5 + s * 0.5, mastC, 0.36, phase);
+      }
+
+      // 船头船尾灯
+      push(bx, wy + 2.9, bz - len / 2 + 0.5, lampC, 1.1, phase);
+      push(bx, wy + 2.9, bz + len / 2 - 0.5, lampC, 1.1, phase);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute('phase', new THREE.Float32BufferAttribute(phases, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        attribute float phase;
+        varying vec3 vColor;
+        uniform float uTime;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vec3 pos = position;
+          // 随波摇曳 + 缓慢往复漂移
+          pos.y += sin(uTime * 0.7 + pos.x * 0.5) * 0.1 + sin(uTime * 0.28 + phase) * 0.16;
+          pos.z += sin(uTime * 0.09 + phase) * 3.2;
+          pos.x += sin(uTime * 0.33 + phase * 1.7) * 0.35;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.4, 6.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 8.0);
+          gl_FragColor = vec4(vColor, glow * 0.9);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 虹桥市井 · 行人 (Crowds on the bridge and streets) ───
+  function createCrowds() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+
+    const inkC = new THREE.Color(0x3a352c);
+    const clothCs = [
+      new THREE.Color(0x3a352c), new THREE.Color(0x3a352c),
+      new THREE.Color(0xcfc3a5), new THREE.Color(0x8a6a48),
+      new THREE.Color(0x5a6a68), new THREE.Color(0x6a4a30),
+    ];
+    const headC = new THREE.Color(0xd8c8a4);
+
+    function addPerson(px, py, pz) {
+      const cloth = clothCs[Math.floor(Math.random() * clothCs.length)];
+      positions.push(px, py + 0.95, pz);          // 头
+      colors.push(headC.r, headC.g, headC.b);
+      sizes.push(0.5);
+      positions.push(px, py + 0.55, pz);          // 身
+      colors.push(cloth.r, cloth.g, cloth.b);
+      sizes.push(0.55);
+      positions.push(px + (Math.random() - 0.5) * 0.3, py + 0.1, pz + (Math.random() - 0.5) * 0.3); // 足
+      colors.push(inkC.r, inkC.g, inkC.b);
+      sizes.push(0.4);
+    }
+
+    // 虹桥桥面 (全画最热闹处)
+    const bridgeZ = -80;
+    const riverC = getRiverCenter(bridgeZ);
+    const span = 38;
+    const yEnd = getTerrainHeight(riverC - span / 2, bridgeZ);
+    for (let i = 0; i < 64; i++) {
+      const t = Math.random() * 0.9 + 0.05;
+      const px = riverC - span / 2 + t * span;
+      const py = yEnd + Math.sin(t * Math.PI) * 9 + 0.65;
+      addPerson(px + (Math.random() - 0.5) * 0.6, py, bridgeZ + (Math.random() - 0.5) * 4);
+    }
+    // 两岸街市
+    for (let i = 0; i < 110; i++) {
+      const bz = -330 + Math.random() * 690;
+      const rc = getRiverCenter(bz);
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const px = rc + side * (14 + Math.random() * 22);
+      addPerson(px, getTerrainHeight(px, bz) + 0.1, bz + (Math.random() - 0.5) * 4);
+    }
+    // 郊野行人
+    for (let i = 0; i < 26; i++) {
+      const bz = -400 + Math.random() * 800;
+      const rc = getRiverCenter(bz);
+      const px = rc + (Math.random() > 0.5 ? 1 : -1) * (30 + Math.random() * 15);
+      addPerson(px, getTerrainHeight(px, bz) + 0.1, bz);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.4, 4.5);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 7.0);
+          gl_FragColor = vec4(vColor, glow * 0.95);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 汴水波纹 · 笔意水线 (Ripple lines on the river) ───
+  function createWaterLines() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+    const phases = [];
+    const lineAlphas = [];
+
+    const lineC1 = new THREE.Color(0xd9b878);
+    const lineC2 = new THREE.Color(0xa8894f);
+
+    for (let l = 0; l < 520; l++) {
+      const bz = (Math.random() - 0.5) * (CONFIG.terrainDepth - 70);
+      const rc = getRiverCenter(bz);
+      const px0 = rc + (Math.random() - 0.5) * CONFIG.riverWidth * 0.75;
+      const len = 2.5 + Math.random() * 5;
+      const phase = Math.random() * Math.PI * 2;
+      const bend = (Math.random() - 0.5) * 0.7;
+      const alpha = 0.3 + Math.random() * 0.4;
+      const bright = Math.random() > 0.72;
+      const seg = 9;
+      for (let i = 0; i < seg; i++) {
+        const t = i / (seg - 1) - 0.5;
+        const px = px0 + t * len;
+        positions.push(px, getTerrainHeight(px, bz) + 0.3 + Math.random() * 0.25, bz + Math.sin(t * Math.PI) * bend);
+        const c = bright ? lineC1 : lineC2;
+        colors.push(c.r, c.g, c.b);
+        sizes.push(0.28 + Math.random() * 0.22);
+        phases.push(phase);
+        lineAlphas.push(alpha);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute('phase', new THREE.Float32BufferAttribute(phases, 1));
+    geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(lineAlphas, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        attribute float phase;
+        attribute float alpha;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uTime;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vAlpha = alpha * (0.7 + 0.3 * sin(uTime * 1.1 + phase));
+          vec3 pos = position;
+          // 整条水线随波往复
+          pos.x += sin(uTime * 0.4 + phase) * 0.7;
+          pos.z += sin(uTime * 0.22 + phase * 1.3) * 1.6;
+          pos.y += sin(uTime * 1.2 + phase) * 0.07;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.3, 4.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 6.0);
+          gl_FragColor = vec4(vColor, glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 远山淡墨 (Distant ink-wash ranges) ───
+  function createDistantMountains() {
+    const layers = [
+      { dist: 108, spread: 60, height: 30, seed: 3.1, color: new THREE.Color(0x3d372c), alpha: 0.10, count: 13000 },
+      { dist: 152, spread: 75, height: 42, seed: 7.7, color: new THREE.Color(0x463f30), alpha: 0.075, count: 11000 },
+      { dist: 198, spread: 85, height: 55, seed: 12.4, color: new THREE.Color(0x52493a), alpha: 0.05, count: 9000 },
+    ];
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+    const alphas = [];
+
+    layers.forEach(L => {
+      for (let i = 0; i < L.count; i++) {
+        const z = (Math.random() - 0.5) * CONFIG.terrainDepth * 1.05;
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const x = side * (L.dist + Math.pow(Math.random(), 1.5) * L.spread);
+        // 山脊线随 z 起伏, 点在脊线下堆积成剪影
+        const ridge = L.height * (0.45 + 0.55 * smoothNoise(z * 0.004 + L.seed, L.seed * 2.0));
+        const y = ridge * Math.pow(Math.random(), 1.7);
+        positions.push(x, y, z);
+        colors.push(L.color.r, L.color.g, L.color.b);
+        sizes.push(1.2 + Math.random() * 1.6);
+        alphas.push(L.alpha * (0.6 + Math.random() * 0.4));
+      }
+    });
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.5, 8.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 6.0);
+          gl_FragColor = vec4(vColor, glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 郊野土路 · 城内街衢 (Roads & streets) ───
+  function createRoads() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+    const alphas = [];
+
+    const roadC = new THREE.Color(0x8a7a5c);
+    const roadC2 = new THREE.Color(0x6e6248);
+
+    function gauss() {
+      return (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+    }
+    function buildRoad(zStart, zEnd, count, xOff, wiggle) {
+      for (let i = 0; i < count; i++) {
+        const z = zStart + Math.random() * (zEnd - zStart);
+        const px = getRiverCenter(z) + xOff + Math.sin(z * 0.01) * wiggle + gauss() * 2.4;
+        const py = getTerrainHeight(px, z) + 0.15 + Math.random() * 0.4;
+        positions.push(px, py, z);
+        const c = Math.random() > 0.5 ? roadC : roadC2;
+        colors.push(c.r, c.g, c.b);
+        sizes.push(0.5 + Math.random() * 0.7);
+        alphas.push(0.16 + Math.random() * 0.16);
+      }
+    }
+    // 西岸主路 (南郊入城) + 东岸街衢
+    buildRoad(-272, 410, 10000, -31, 6);
+    buildRoad(-272, 400, 7000, 33, 5);
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uPixelRatio: { value: renderer.getPixelRatio() } },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uPixelRatio;
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * uPixelRatio * (90.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.4, 5.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 6.0);
+          gl_FragColor = vec4(vColor, glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 汴岸垂柳 (Drooping Willows along the banks) ───
+  function createWillows() {
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+    const swayPhase = [];
+    const swayAmp = [];
+
+    const trunkC = new THREE.Color(0x3a2f22);
+    const leaf1 = new THREE.Color(0x66744f);
+    const leaf2 = new THREE.Color(0x4e5c42);
+    const leaf3 = new THREE.Color(0x39462f);
+
+    const treeCount = 30;
+    for (let t = 0; t < treeCount; t++) {
+      const bz = -370 + (t / treeCount) * 740 + (Math.random() - 0.5) * 30;
+      const riverC = getRiverCenter(bz);
+      const side = (t % 2 === 0) ? -1 : 1;
+      const bx = riverC + side * (CONFIG.riverWidth * (0.95 + Math.random() * 0.75));
+      const h = getTerrainHeight(bx, bz);
+      const trunkH = 4.5 + Math.random() * 2.5;
+      const lean = -side * (0.5 + Math.random() * 0.6);
+      const leanX = lean * 0.9, leanZ = (Math.random() - 0.5) * 0.8;
+
+      // 树干: 底粗上细, 探向水面
+      const tp = 30;
+      for (let i = 0; i < tp; i++) {
+        const f = i / tp;
+        positions.push(
+          bx + leanX * f * trunkH * 0.5 + (Math.random() - 0.5) * (0.7 * (1 - f) + 0.08),
+          h + f * trunkH,
+          bz + leanZ * f * trunkH * 0.5 + (Math.random() - 0.5) * (0.7 * (1 - f) + 0.08)
+        );
+        colors.push(trunkC.r, trunkC.g, trunkC.b);
+        sizes.push(0.55 + 0.55 * (1 - f) + Math.random() * 0.2);
+        swayPhase.push(0);
+        swayAmp.push(0);
+      }
+
+      const topX = bx + leanX * trunkH * 0.5;
+      const topZ = bz + leanZ * trunkH * 0.5;
+      const topY = h + trunkH;
+
+      // 一级枝 → 枝端树冠团 → 垂丝
+      const branchN = 3 + Math.floor(Math.random() * 2);
+      for (let b = 0; b < branchN; b++) {
+        const bAng = (b / branchN) * Math.PI * 2 + Math.random() * 0.8;
+        const bLen = 1.6 + Math.random() * 1.4;
+        const bDip = 0.5 + Math.random() * 0.7;
+        const endX = topX + Math.cos(bAng) * bLen;
+        const endZ = topZ + Math.sin(bAng) * bLen;
+        const endY = topY + 0.5 + Math.random() * 0.6 - bDip;
+
+        // 弧形枝条
+        for (let i = 0; i <= 8; i++) {
+          const f = i / 8;
+          positions.push(
+            topX + (endX - topX) * f + Math.sin(f * Math.PI) * 0.25,
+            topY + (endY - topY) * f + Math.sin(f * Math.PI) * 0.35,
+            topZ + (endZ - topZ) * f
+          );
+          colors.push(trunkC.r, trunkC.g, trunkC.b);
+          sizes.push(0.4 - f * 0.15);
+          swayPhase.push(0);
+          swayAmp.push(0);
+        }
+
+        // 枝端树冠团
+        for (let i = 0; i < 26; i++) {
+          positions.push(
+            endX + (Math.random() - 0.5) * 2.1,
+            endY + 0.4 + (Math.random() - 0.5) * 1.5,
+            endZ + (Math.random() - 0.5) * 2.1
+          );
+          const c = Math.random() > 0.5 ? leaf1 : (Math.random() > 0.5 ? leaf2 : leaf3);
+          colors.push(c.r, c.g, c.b);
+          sizes.push(Math.random() * 1.2 + 0.35);
+          swayPhase.push(Math.random() * Math.PI * 2);
+          swayAmp.push(0.16);
+        }
+
+        // 垂丝: 自枝端弧线垂落, 梢部风摆
+        const strandN = 4 + Math.floor(Math.random() * 3);
+        for (let s = 0; s < strandN; s++) {
+          const sAng = Math.random() * Math.PI * 2;
+          const sx = endX + Math.cos(sAng) * Math.random() * 1.2;
+          const sz = endZ + Math.sin(sAng) * Math.random() * 1.2;
+          const phase = Math.random() * Math.PI * 2;
+          const len = 2.5 + Math.random() * 3.2;
+          const curl = (Math.random() - 0.5) * 0.8;
+          const seg = 12;
+          for (let i = 0; i < seg; i++) {
+            const f = i / (seg - 1);
+            positions.push(
+              sx + Math.sin(f * Math.PI) * curl + Math.cos(sAng) * f * 0.3,
+              endY - f * len,
+              sz + Math.cos(f * Math.PI) * curl * 0.5 + Math.sin(sAng) * f * 0.3
+            );
+            const c = f > 0.7 ? leaf3 : (f > 0.35 ? leaf2 : leaf1);
+            colors.push(c.r, c.g, c.b);
+            sizes.push(0.32 + Math.random() * 0.42);
+            swayPhase.push(phase);
+            swayAmp.push(f * f * 1.0);
+          }
+        }
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute('swayPhase', new THREE.Float32BufferAttribute(swayPhase, 1));
+    geometry.setAttribute('swayAmp', new THREE.Float32BufferAttribute(swayAmp, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float swayPhase;
+        attribute float swayAmp;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vColor = color;
+          vAlpha = 0.8;
+          vec3 pos = position;
+          // 风过柳丝，梢部摆幅最大
+          pos.x += sin(uTime * 0.9 + swayPhase + pos.y * 0.2) * swayAmp;
+          pos.z += cos(uTime * 0.7 + swayPhase * 1.3) * swayAmp * 0.4;
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (80.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 0.4, 6.0);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float glow = exp(-dist * dist * 7.0);
+          // 墨点颗粒
+          float grain = fract(sin(dot(gl_PointCoord, vec2(12.9898, 78.233))) * 43758.5453);
+          glow *= 0.82 + 0.18 * grain;
+          gl_FragColor = vec4(vColor, glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ─── 汴河烟霭 (Ink-wash mist over the river valley) ───
+  function createMist() {
+    const count = 190;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const alphas = new Float32Array(count);
+    const phases = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      const foreground = i >= 130;   // 后 60 颗为前景虚化大颗粒
+      const z = (Math.random() - 0.5) * CONFIG.terrainDepth * 0.95;
+      const riverC = getRiverCenter(z);
+      positions[i * 3] = riverC + (Math.random() - 0.5) * (foreground ? CONFIG.riverWidth * 8 : CONFIG.riverWidth * 5);
+      positions[i * 3 + 1] = foreground ? 2 + Math.random() * 26 : 3 + Math.random() * 12;
+      positions[i * 3 + 2] = z;
+      sizes[i] = foreground ? 55 + Math.random() * 55 : 18 + Math.random() * 34;
+      alphas[i] = foreground ? 0.012 + Math.random() * 0.02 : 0.025 + Math.random() * 0.045;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+        attribute float phase;
+        varying float vAlpha;
+        uniform float uTime;
+        uniform float uPixelRatio;
+
+        void main() {
+          vec3 pos = position;
+          pos.x += sin(uTime * 0.06 + phase) * 9.0;
+          pos.z += cos(uTime * 0.045 + phase * 0.7) * 7.0;
+          pos.y += sin(uTime * 0.08 + phase * 1.3) * 1.6;
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * uPixelRatio * (120.0 / -mvPosition.z);
+          gl_PointSize = clamp(gl_PointSize, 10.0, 220.0);
+          vAlpha = alpha;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          float glow = exp(-dist * dist * 6.5);
+          if (glow < 0.01) discard;
+          gl_FragColor = vec4(0.78, 0.70, 0.55, glow * vAlpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    return new THREE.Points(geometry, material);
+  }
+
+  // ── Build Scene ───
+  const terrain = createTerrainParticles();
+  scene.add(terrain);
+
+  const stars = createStars();
+  scene.add(stars);
+
+  const architecture = createArchitectureParticles();
+  scene.add(architecture);
+
+  const lanterns = createLanterns();
+  scene.add(lanterns);
+
+  const willows = createWillows();
+  scene.add(willows);
+
+  const mist = createMist();
+  scene.add(mist);
+
+  const rainbowBridge = createRainbowBridge();
+  scene.add(rainbowBridge);
+
+  const cityGate = createCityGate();
+  scene.add(cityGate);
+
+  const boats = createBoats();
+  scene.add(boats);
+
+  const crowds = createCrowds();
+  scene.add(crowds);
+
+  const waterLines = createWaterLines();
+  scene.add(waterLines);
+
+  const distantMountains = createDistantMountains();
+  scene.add(distantMountains);
+
+  const roads = createRoads();
+  scene.add(roads);
+
+  // ─── Camera Controls ──
+  let targetRotX = 0, targetRotY = 0;
+  let camDist = 90, targetCamDist = 90;
+  let camHeight = 45, targetCamHeight = 45;
+  let scrollZ = 0, targetScrollZ = 0;
+  let isDragging = false;
+  let lastMouseX = 0, lastMouseY = 0;
+  let autoScroll = false;
+  let entered = false;
+
+  document.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    targetRotY += dx * 0.004;
+    targetRotX += dy * 0.003;
+    targetRotX = Math.max(-0.6, Math.min(0.6, targetRotX));
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
+
+  document.addEventListener('mouseup', () => { isDragging = false; });
+
+  document.addEventListener('wheel', (e) => {
+    targetCamDist += e.deltaY * 0.06;
+    targetCamDist = Math.max(25, Math.min(250, targetCamDist));
+    targetScrollZ += e.deltaY * 0.4;
+    targetScrollZ = Math.max(-350, Math.min(350, targetScrollZ));
+  }, { passive: true });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      autoScroll = !autoScroll;
+    }
+  });
+
+  let touchStartX = 0, touchStartY = 0;
+  document.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  });
+
+  document.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    targetRotY += dx * 0.004;
+    targetRotX += dy * 0.003;
+    targetRotX = Math.max(-0.6, Math.min(0.6, targetRotX));
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: false });
+
+  // ─── Gesture Control (MediaPipe Hands) ───
+  let gestureActive = false;
+  let prevHandCenter = null;
+  let prevHandSize = null;
+  let gestureSmoothRotX = 0, gestureSmoothRotY = 0;
+  let gestureSmoothHeight = 0, gestureSmoothDist = 0;
+
+  function initGestureControl() {
+    const video = document.getElementById('gestureVideo');
+    const gestureCanvas = document.getElementById('gestureCanvas');
+    const gctx = gestureCanvas.getContext('2d');
+    const gestureHint = document.getElementById('gestureHint');
+
+    if (typeof Hands === 'undefined') {
+      console.warn('MediaPipe Hands not loaded');
+      return;
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults((results) => {
+      gctx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        prevHandCenter = null;
+        prevHandSize = null;
+        return;
+      }
+
+      const landmarks = results.multiHandLandmarks[0];
+
+      // 绘制手势骨架轮廓（连线 + 关键点）
+      if (typeof drawConnectors === 'function' && typeof HAND_CONNECTIONS !== 'undefined') {
+        drawConnectors(gctx, landmarks, HAND_CONNECTIONS, {
+          color: 'rgba(140, 210, 210, 0.85)',
+          lineWidth: 3
+        });
+        drawLandmarks(gctx, landmarks, {
+          color: 'rgba(235, 248, 248, 0.95)',
+          fillColor: 'rgba(140, 210, 210, 0.6)',
+          lineWidth: 1,
+          radius: 3
+        });
+      }
+
+      // Hand center (wrist = 0, middle finger MCP = 9)
+      const wrist = landmarks[0];
+      const middleMCP = landmarks[9];
+      const handCenterX = (wrist.x + middleMCP.x) / 2;
+      const handCenterY = (wrist.y + middleMCP.y) / 2;
+
+      // Hand size: distance from wrist to middle finger tip (landmark 12)
+      const middleTip = landmarks[12];
+      const handSize = Math.sqrt(
+        Math.pow(middleTip.x - wrist.x, 2) + Math.pow(middleTip.y - wrist.y, 2)
+      );
+
+      // Index finger tip (4) and thumb tip (8) for pinch detection
+      const indexTip = landmarks[8];
+      const thumbTip = landmarks[4];
+      const pinchDist = Math.sqrt(
+        Math.pow(indexTip.x - thumbTip.x, 2) + Math.pow(indexTip.y - thumbTip.y, 2)
+      );
+
+      if (prevHandCenter !== null) {
+        const dx = handCenterX - prevHandCenter.x;
+        const dy = handCenterY - prevHandCenter.y;
+
+        // Hand movement → rotate camera (mirrored)
+        gestureSmoothRotY -= dx * 3.0;
+        gestureSmoothRotX += dy * 2.0;
+        gestureSmoothRotX = Math.max(-0.6, Math.min(0.6, gestureSmoothRotX));
+
+        // Hand size change → camera height
+        const sizeDelta = handSize - (prevHandSize || handSize);
+        gestureSmoothHeight += sizeDelta * 80;
+
+        // Pinch → push in/out (zoom)
+        if (pinchDist < 0.06) {
+          gestureSmoothDist -= 2;
+        } else if (pinchDist > 0.15) {
+          gestureSmoothDist += 1;
+        }
+      }
+
+      prevHandCenter = { x: handCenterX, y: handCenterY };
+      prevHandSize = handSize;
+    });
+
+    // Start camera
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } })
+        .then((stream) => {
+          video.srcObject = stream;
+          video.play();
+          video.style.opacity = '1';
+          gestureActive = true;
+
+          if (gestureHint) gestureHint.style.opacity = '1';
+
+          // Process frames
+          async function processFrame() {
+            if (!gestureActive) return;
+            if (video.readyState >= 2) {
+              await hands.send({ image: video });
+            }
+            requestAnimationFrame(processFrame);
+          }
+          processFrame();
+        })
+        .catch((err) => {
+          console.warn('Camera access denied or unavailable:', err);
+        });
+    }
+  }
+
+  // Apply gesture control in animation loop
+  function applyGestureControl() {
+    if (!gestureActive) return;
+
+    targetRotY += gestureSmoothRotY * 0.01;
+    targetRotX += gestureSmoothRotX * 0.01;
+    targetRotX = Math.max(-0.6, Math.min(0.6, targetRotX));
+
+    targetCamHeight += gestureSmoothHeight * 0.02;
+    targetCamHeight = Math.max(15, Math.min(100, targetCamHeight));
+
+    targetCamDist += gestureSmoothDist * 0.3;
+    targetCamDist = Math.max(25, Math.min(250, targetCamDist));
+
+    // Decay
+    gestureSmoothRotX *= 0.85;
+    gestureSmoothRotY *= 0.85;
+    gestureSmoothHeight *= 0.85;
+    gestureSmoothDist *= 0.85;
+  }
+
+  // ─── UI ───
+  const enterBtn = document.getElementById('enter-btn');
+  const loadingText = document.getElementById('loadingText');
+  const titlePanel = document.getElementById('titlePanel');
+  const hintBar = document.getElementById('hintBar');
+  const sectionLabel = document.getElementById('sectionLabel');
+  const scrollProgress = document.getElementById('scrollProgress');
+
+  setTimeout(() => {
+    loadingText.classList.add('hidden');
+    enterBtn.style.display = 'block';
+    requestAnimationFrame(() => enterBtn.classList.remove('hidden'));
+  }, 2500);
+
+  enterBtn.addEventListener('click', () => {
+    entered = true;
+    enterBtn.classList.add('hidden');
+
+    // 镜头藏于卷轴之后: 高空远眺, 开卷同时俯冲入画 (目标值保持 90/45, lerp 自然形成俯冲)
+    camDist = 240;
+    camHeight = 95;
+    targetRotY = 0.35;
+
+    // 开卷仪式: 钤印 → 题签退场 → 包首卷走
+    const cover = document.getElementById('scrollCover');
+    const strip = document.getElementById('coverStrip');
+    setTimeout(() => strip.classList.add('stamping'), 350);
+    setTimeout(() => strip.classList.add('lift'), 1350);
+    setTimeout(() => cover.classList.add('unrolling'), 1500);
+    setTimeout(() => { cover.style.display = 'none'; }, 4100);
+    setTimeout(() => {
+      titlePanel.classList.add('visible');
+      hintBar.classList.add('visible');
+      sectionLabel.classList.add('visible');
+    }, 2600);
+    // 初始化手势控制
+    initGestureControl();
+  });
+
+  // ─── Animation ───
+  const clock = new THREE.Clock();
+  let frameCount = 0;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const elapsed = clock.getElapsedTime();
+    frameCount++;
+
+    // 应用手势控制
+    applyGestureControl();
+
+    if (autoScroll && entered) {
+      targetScrollZ -= CONFIG.autoScrollSpeed;
+      if (targetScrollZ < -350) targetScrollZ = 350;
+    }
+
+    scrollZ += (targetScrollZ - scrollZ) * 0.04;
+    camDist += (targetCamDist - camDist) * 0.04;
+    camHeight += (targetCamHeight - camHeight) * 0.04;
+
+    // Orbit camera
+    const camX = Math.sin(targetRotY) * camDist;
+    const camZPos = Math.cos(targetRotY) * camDist;
+
+    camera.position.x = camX;
+    camera.position.y = camHeight + targetRotX * 25;
+    camera.position.z = camZPos + scrollZ;
+
+    const lookTarget = new THREE.Vector3(
+      Math.sin(targetRotY) * 30,
+      targetRotX * 12 - 2,
+      scrollZ - 40
+    );
+    camera.lookAt(lookTarget);
+
+    terrain.material.uniforms.uTime.value = elapsed;
+    stars.material.uniforms.uTime.value = elapsed;
+    architecture.material.uniforms.uTime.value = elapsed;
+    lanterns.material.uniforms.uTime.value = elapsed;
+    willows.material.uniforms.uTime.value = elapsed;
+    mist.material.uniforms.uTime.value = elapsed;
+    boats.material.uniforms.uTime.value = elapsed;
+    waterLines.material.uniforms.uTime.value = elapsed;
+
+    if (entered && frameCount % 20 === 0) {
+      const progress = (scrollZ + 350) / 700;
+      scrollProgress.style.width = (Math.max(0, Math.min(1, progress)) * 100) + '%';
+
+      if (progress < 0.3) {
+        sectionLabel.textContent = '郊野春色';
+      } else if (progress < 0.6) {
+        sectionLabel.textContent = '汴河繁华';
+      } else {
+        sectionLabel.textContent = '京风华';
+      }
+    }
+
+    if (composer) {
+      composer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  animate();
+})();
+</script>
+</body>
+</html>
